@@ -1,0 +1,170 @@
+version: "3.7"
+services:
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - cortex_network
+    volumes:
+      - "./grafana-provisioning/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml"
+
+  prometheus1:
+    image: prom/prometheus:v2.23.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30m"
+      - "--storage.tsdb.retention.size=200MB"
+    ports:
+      - "9090:9090"
+    networks:
+      - cortex_network
+    volumes:
+      - "./prometheus-configs/prometheus1.yml:/etc/prometheus/prometheus.yml"
+
+  prometheus2:
+    image: prom/prometheus:v2.23.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30m"
+      - "--storage.tsdb.retention.size=200MB"    
+    networks:
+      - cortex_network
+    volumes:
+      - "./prometheus-configs/prometheus2.yml:/etc/prometheus/prometheus.yml"
+
+  prometheus3:
+    image: prom/prometheus:v2.23.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30m"
+      - "--storage.tsdb.retention.size=200MB"    
+    networks:
+      - cortex_network
+    volumes:
+      - "./prometheus-configs/prometheus3.yml:/etc/prometheus/prometheus.yml"
+
+  consul:
+    image: consul
+    ports:
+      - '8500:8500'
+    restart: on-failure
+    networks:
+      - cortex_network
+
+  cortex1:
+    image: quay.io/cortexproject/cortex:master-fdf2cf8
+    restart: on-failure
+    networks:
+      - cortex_network
+    ports:
+      - "9009:9009"
+    volumes:
+      - "./cortex-configs/single-process-config.yaml:/etc/single-process-config.yaml"
+    command:
+      [
+        "-config.file=/etc/single-process-config.yaml",
+        "-ring.store=consul",
+        "-consul.hostname=consul:8500",
+        "-distributor.replication-factor=3",
+      ]
+
+  cortex2:
+    image: quay.io/cortexproject/cortex:master-fdf2cf8
+    restart: on-failure
+    networks:
+      - cortex_network
+    volumes:
+      - "./cortex-configs/single-process-config.yaml:/etc/single-process-config.yaml"
+    command:
+      [
+        "-config.file=/etc/single-process-config.yaml",
+        "-ring.store=consul",
+        "-consul.hostname=consul:8500",
+        "-distributor.replication-factor=3",
+      ]
+
+  cortex3:
+    image: quay.io/cortexproject/cortex:master-fdf2cf8
+    restart: on-failure
+    networks:
+      - cortex_network
+    volumes:
+      - "./cortex-configs/single-process-config.yaml:/etc/single-process-config.yaml"
+    command:
+      [
+        "-config.file=/etc/single-process-config.yaml",
+        "-ring.store=consul",
+        "-consul.hostname=consul:8500",
+        "-distributor.replication-factor=3",
+      ]
+  minio:
+    image: minio/minio:RELEASE.2020-08-18T19-41-00Z
+    environment:
+      MINIO_ACCESS_KEY: AKIAIOSFODNN7EXAMPLE
+      MINIO_SECRET_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    ports:
+      - "9000:9000"
+    command: ["server", "/tmp"]
+    restart: on-failure
+    networks:
+      - cortex_network
+  weavescope:
+    image: weaveworks/scope:1.13.1
+    ports:
+     - '4040:4040'
+    pid: "host"
+    privileged: true
+    labels:
+      - "works.weave.role=system"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:rw"
+    command:
+      - "--probe.docker=true"
+  memcached:
+    image: memcached:1.6.9
+    command:
+      - "-m"
+      - "128"
+    networks:
+      - cortex_network      
+  avalanche:
+    # Load test prometheus
+    image: quay.io/freshtracks.io/avalanche
+    ports:
+      - '9001:9001'
+    networks:
+      - cortex_network      
+  traefik:
+    image: "traefik:v2.3"
+    networks:
+      - cortex_network      
+    container_name: "traefik"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.metrics.address=:38080"
+      - "--metrics.prometheus.entrypoint=metrics"
+    ports:
+      - "80:80"
+      - "38080:38080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  whoami:
+    image: "traefik/whoami"
+    networks:
+      - cortex_network      
+    container_name: "simple-service"
+    ports:
+      - "38000:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`whoami.localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+
+networks:
+  cortex_network:
