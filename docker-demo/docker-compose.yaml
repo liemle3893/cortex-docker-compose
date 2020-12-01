@@ -13,7 +13,7 @@ services:
     image: prom/prometheus:v2.23.0
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=30m"
+      - "--storage.tsdb.retention.time=3m"
       - "--storage.tsdb.retention.size=200MB"
     ports:
       - "9090:9090"
@@ -21,33 +21,51 @@ services:
       - cortex_network
     volumes:
       - "./prometheus-configs/prometheus1.yml:/etc/prometheus/prometheus.yml"
+    mem_limit: 100m
+    mem_reservation: 100m
+  prometheus11:
+    image: prom/prometheus:v2.23.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=3m"
+      - "--storage.tsdb.retention.size=200MB"
+    networks:
+      - cortex_network
+    volumes:
+      - "./prometheus-configs/prometheus1.yml:/etc/prometheus/prometheus.yml"
+    mem_limit: 100m
+    mem_reservation: 100m    
 
   prometheus2:
     image: prom/prometheus:v2.23.0
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=30m"
-      - "--storage.tsdb.retention.size=200MB"    
+      - "--storage.tsdb.retention.time=3m"
+      - "--storage.tsdb.retention.size=200MB"
     networks:
       - cortex_network
     volumes:
       - "./prometheus-configs/prometheus2.yml:/etc/prometheus/prometheus.yml"
+    mem_limit: 750m
+    mem_reservation: 100m
 
   prometheus3:
     image: prom/prometheus:v2.23.0
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=30m"
-      - "--storage.tsdb.retention.size=200MB"    
+      - "--storage.tsdb.retention.time=3m"
+      - "--storage.tsdb.retention.size=200MB"
     networks:
       - cortex_network
     volumes:
       - "./prometheus-configs/prometheus3.yml:/etc/prometheus/prometheus.yml"
+    mem_limit: 750m
+    mem_reservation: 100m
 
   consul:
     image: consul
     ports:
-      - '8500:8500'
+      - "8500:8500"
     restart: on-failure
     networks:
       - cortex_network
@@ -66,8 +84,10 @@ services:
         "-config.file=/etc/single-process-config.yaml",
         "-ring.store=consul",
         "-consul.hostname=consul:8500",
-        "-distributor.replication-factor=3",
+        "-distributor.replication-factor=1",
       ]
+    mem_limit: 2000m
+    mem_reservation: 2000m
 
   cortex2:
     image: quay.io/cortexproject/cortex:master-fdf2cf8
@@ -81,8 +101,10 @@ services:
         "-config.file=/etc/single-process-config.yaml",
         "-ring.store=consul",
         "-consul.hostname=consul:8500",
-        "-distributor.replication-factor=3",
+        "-distributor.replication-factor=1",
       ]
+    mem_limit: 2000m
+    mem_reservation: 2000m
 
   cortex3:
     image: quay.io/cortexproject/cortex:master-fdf2cf8
@@ -96,8 +118,26 @@ services:
         "-config.file=/etc/single-process-config.yaml",
         "-ring.store=consul",
         "-consul.hostname=consul:8500",
-        "-distributor.replication-factor=3",
+        "-distributor.replication-factor=1",
       ]
+    mem_limit: 2000m
+    mem_reservation: 2000m
+  cortex4:
+    image: quay.io/cortexproject/cortex:master-fdf2cf8
+    restart: on-failure
+    networks:
+      - cortex_network
+    volumes:
+      - "./cortex-configs/single-process-config.yaml:/etc/single-process-config.yaml"
+    command:
+      [
+        "-config.file=/etc/single-process-config.yaml",
+        "-ring.store=consul",
+        "-consul.hostname=consul:8500",
+        "-distributor.replication-factor=1",
+      ]
+    mem_limit: 2000m
+    mem_reservation: 2000m    
   minio:
     image: minio/minio:RELEASE.2020-08-18T19-41-00Z
     environment:
@@ -105,40 +145,42 @@ services:
       MINIO_SECRET_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     ports:
       - "9000:9000"
-    command: ["server", "/tmp"]
+    volumes:
+      - './bin/minio:/data'
+    command: ["server", "/data"]
     restart: on-failure
     networks:
       - cortex_network
-  weavescope:
-    image: weaveworks/scope:1.13.1
-    ports:
-     - '4040:4040'
-    pid: "host"
-    privileged: true
-    labels:
-      - "works.weave.role=system"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:rw"
-    command:
-      - "--probe.docker=true"
+  # weavescope:
+  #   image: weaveworks/scope:1.13.1
+  #   ports:
+  #    - '4040:4040'
+  #   pid: "host"
+  #   privileged: true
+  #   labels:
+  #     - "works.weave.role=system"
+  #   volumes:
+  #     - "/var/run/docker.sock:/var/run/docker.sock:rw"
+  #   command:
+  #     - "--probe.docker=true"
   memcached:
     image: memcached:1.6.9
     command:
       - "-m"
       - "128"
     networks:
-      - cortex_network      
+      - cortex_network
   avalanche:
     # Load test prometheus
     image: quay.io/freshtracks.io/avalanche
     ports:
-      - '9001:9001'
+      - "9001:9001"
     networks:
-      - cortex_network      
+      - cortex_network
   traefik:
     image: "traefik:v2.3"
     networks:
-      - cortex_network      
+      - cortex_network
     container_name: "traefik"
     command:
       #- "--log.level=DEBUG"
@@ -157,7 +199,7 @@ services:
   whoami:
     image: "traefik/whoami"
     networks:
-      - cortex_network      
+      - cortex_network
     container_name: "simple-service"
     ports:
       - "38000:80"

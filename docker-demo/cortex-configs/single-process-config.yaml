@@ -18,6 +18,19 @@ distributor:
   shard_by_all_labels: true
   pool:
     health_check_ingesters: true
+  ha_tracker:
+    enable_ha_tracker: true
+    kvstore:
+      store: consul
+      consul:
+        host: consul:8500
+        consistent_reads: true
+  ring:
+    kvstore:
+      store: consul
+      consul:
+        host: consul:8500
+        consistent_reads: true
 
 ingester_client:
   grpc_client_config:
@@ -36,6 +49,7 @@ ingester:
     wal_enabled: true
     recover_from_wal: true
     wal_dir: /tmp/cortex/wal
+    flush_on_shutdown_with_wal_enabled: true
 
   lifecycler:
     # The address to advertise for this ingester.  Will be autodiscovered by
@@ -48,36 +62,25 @@ ingester:
     final_sleep: 0s
     num_tokens: 512
     tokens_file_path: /tmp/cortex/wal/tokens
-
-    # Use an in memory ring store, so we don't need to launch a Consul.
     ring:
       kvstore:
-        store: inmemory
+        store: consul
+        consul:
+          host: consul:8500
+          consistent_reads: true
       replication_factor: 1
-
-# Use local storage - BoltDB for the index, and the filesystem
-# for the chunks.
-schema:
-  configs:
-    - from: 2019-07-29
-      store: boltdb
-      object_store: filesystem
-      schema: v10
-      index:
-        prefix: index_
-        period: 1w
 
 storage:
   engine: blocks
-  boltdb:
-    directory: /tmp/cortex/index
-
-  filesystem:
-    directory: /tmp/cortex/chunks
-
-  delete_store:
-    store: boltdb
-
+  aws:
+    endpoint: "minio:9000"
+    bucketnames: cortex
+    secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    access_key_id: AKIAIOSFODNN7EXAMPLE
+    insecure: true
+    # index_queries_cache_config:
+    #   memcached:
+    #     addresses: dns+memcached:11211
 purger:
   object_store_type: filesystem
 
@@ -108,9 +111,9 @@ blocks_storage:
     insecure: true
   tsdb:
     flush_blocks_on_shutdown: true
-
   bucket_store:
-    index_cache:    
+    max_chunk_pool_bytes: 209715200 # 200MB
+    index_cache:
       backend: memcached
       memcached:
         addresses: dns+memcached:11211
@@ -127,16 +130,21 @@ store_gateway:
   sharding_ring:
     kvstore:
       store: consul
-      prefix: cortex-collectors/
+      # prefix: cortex-collectors/
       consul:
         host: consul:8500
         consistent_reads: true
+    replication_factor: 1    
 
 compactor:
+  block_ranges:
+    - 0h1m0s
+    - 12h0m0s
+    - 24h0m0s
   sharding_ring:
     kvstore:
       store: consul
-      prefix: cortex-collectors/
+      # prefix: cortex-collectors/
       consul:
         host: consul:8500
         consistent_reads: true
