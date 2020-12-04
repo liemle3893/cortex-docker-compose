@@ -5,6 +5,7 @@
 # Disable the requirement that every request to Cortex has a
 # X-Scope-OrgID header. `fake` will be substituted in instead.
 auth_enabled: false
+target: all
 
 server:
   http_listen_port: 9009
@@ -13,6 +14,10 @@ server:
   grpc_server_max_recv_msg_size: 104857600
   grpc_server_max_send_msg_size: 104857600
   grpc_server_max_concurrent_streams: 1000
+  log_level: debug
+
+api:
+  response_compression_enabled: true
 
 distributor:
   shard_by_all_labels: true
@@ -22,12 +27,14 @@ distributor:
     enable_ha_tracker: true
     kvstore:
       store: consul
+      prefix: cortex-collectors/
       consul:
         host: consul:8500
         consistent_reads: true
   ring:
     kvstore:
       store: consul
+      prefix: cortex-collectors/
       consul:
         host: consul:8500
         consistent_reads: true
@@ -65,10 +72,11 @@ ingester:
     ring:
       kvstore:
         store: consul
+        prefix: cortex-collectors/
         consul:
           host: consul:8500
           consistent_reads: true
-      replication_factor: 1
+      replication_factor: 3
 
 storage:
   engine: blocks
@@ -78,9 +86,6 @@ storage:
     secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     access_key_id: AKIAIOSFODNN7EXAMPLE
     insecure: true
-    # index_queries_cache_config:
-    #   memcached:
-    #     addresses: dns+memcached:11211
 purger:
   object_store_type: filesystem
 
@@ -93,11 +98,40 @@ frontend_worker:
 # rules: https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/#recording-rules
 ruler:
   enable_api: true
-  enable_sharding: false
+  enable_sharding: true
   storage:
-    type: local
+    type: s3
+    # type: s3
     local:
       directory: /tmp/cortex/rules
+    s3:
+      endpoint: "minio:9000"
+      bucketnames: cortex
+      secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      access_key_id: AKIAIOSFODNN7EXAMPLE
+      insecure: true
+      s3forcepathstyle: true
+  ring:
+    kvstore:
+      store: consul
+      prefix: cortex-collectors/rulers/
+      consul:
+        host: consul:8500
+        consistent_reads: true
+  alertmanager_url: http://alertmanager:9093
+
+alertmanager:
+  enable_api: true
+  data_dir: /tmp/alertmanager
+  external_url: http://127.0.0.1:9009/alertmanager
+  storage:
+    type: s3
+    s3:
+      endpoint: "minio:9000"
+      bucketnames: cortex
+      secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+      access_key_id: AKIAIOSFODNN7EXAMPLE
+      insecure: true
 
 # MINIO_ACCESS_KEY: AKIAIOSFODNN7EXAMPLE
 # MINIO_SECRET_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
@@ -130,21 +164,22 @@ store_gateway:
   sharding_ring:
     kvstore:
       store: consul
-      # prefix: cortex-collectors/
+      prefix: cortex-collectors/
       consul:
         host: consul:8500
         consistent_reads: true
-    replication_factor: 1    
+    replication_factor: 3
 
 compactor:
   block_ranges:
     - 0h1m0s
-    - 12h0m0s
-    - 24h0m0s
+    - 0h15m0s
+    - 0h30m0s
+  sharding_enabled: true
   sharding_ring:
     kvstore:
       store: consul
-      # prefix: cortex-collectors/
+      prefix: cortex-collectors/
       consul:
         host: consul:8500
         consistent_reads: true
